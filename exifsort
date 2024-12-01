@@ -1,0 +1,42 @@
+#!/bin/env python3
+"""Sort image files from Google Photos by camera model."""
+
+import os
+import exifread
+import collections
+from pathlib import Path
+import sys
+
+sortkey = 'Image Model'
+
+if len(sys.argv) != 4:
+    print('exifsort [stats|dry-run|move] <srcdir> <dstdir>')
+    exit(1)
+
+_, mode, srcdir, dstdir = sys.argv
+
+files = (Path(d) / Path(ff) for d, _, f in os.walk(srcdir) for ff in f)
+
+from_to = ((f, exifread.process_file(open(f, 'rb')).get(sortkey)) for f in files)
+from_to = ((f, (Path(dstdir) / Path(str(d)))) for f, d in from_to if d is not None)
+
+from_to = list(from_to) # [111:222]
+
+models = collections.Counter(d for _, d in from_to)
+
+mv_fmt = 'mv "{0}" "{1}"'
+stat_fmt = '{0:%d} {1:8}' % max(len(str(m)) for m in models)
+
+if mode == 'stats':
+    stat_lines = (stat_fmt.format(str(k), v) for k, v in models.items())
+    print('\n'.join(sorted(stat_lines)))
+elif mode == 'dry-run':
+    for file, dirname in from_to:
+        print(mv_fmt.format(file, dirname))
+elif mode == 'move':
+    for dirname in models:
+        dirname.mkdir(exist_ok=True, parents=True)
+
+    for file, dirname in from_to:
+        print(mv_fmt.format(file, dirname))
+        file.rename(dirname / file.name)
